@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>实时参数监控</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/chart.js/dist/chart.umd.js"></script>
+    
+    <style>
+        /* 基础卡片样式 */
+        .monitor-card {
+            background-color: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 400px;
+            height: 200px;
+            position: fixed;
+            transition: all 0.3s ease;
+        }
+        
+        /* 图表容器样式 */
+        .chart-container {
+            background-color: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 1260px; /* 调整为3个卡片+2个间隙的宽度 */
+            height: 400px;
+            position: fixed;
+        }
+        
+        /* 时间卡片样式 */
+        .time-card {
+            background-color: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(8px);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 1260px; /* 与图表容器一致 */
+            height: 100px;
+            position: fixed;
+        }
+        
+        /* 图表包装器 */
+        .chart-wrapper {
+            width: 100%;
+            height: calc(100% - 40px);
+            position: relative;
+        }
+        
+        /* 参数值样式 */
+        .parameter-value {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 8px 0;
+        }
+        
+        /* 禁用缩放 */
+        body {
+            overflow: hidden;
+        }
+        
+        /* 自定义工具提示样式 */
+        .chart-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 14px;
+            z-index: 100;
+            transition: all 0.1s ease;
+        }
+    </style>
+</head>
+<body class="font-sans text-gray-800 relative overflow-hidden bg-gray-100" onwheel="preventZoom(event)">
+    <!-- 背景图片 -->
+    <div class="fixed inset-0 z-0">
+        <img id="bg-image" src="background.jpg" alt="监控系统背景图" 
+             class="w-full h-full object-cover"
+             onerror="this.src='https://picsum.photos/id/180/1920/1080'; this.alt='备用背景图';">
+    </div>
+
+    <!-- 主要内容容器 -->
+    <div class="relative z-10 w-[1300px] h-[100vh] mx-auto overflow-hidden">
+        <!-- 头部区域 -->
+        <header class="text-center w-[1260px] fixed top-[20px] left-[50%] transform -translate-x-1/2">
+            <h1 class="text-[40px] font-bold mb-2">实时参数监控系统</h1>
+           <!-- <div id="update-status" class="mt-2"></div> -->
+        </header>
+
+        <!-- === 2x3参数卡片布局 === -->
+        <!-- 第一行 -->
+        <!-- 温度卡片 -->
+        <div class="monitor-card top-[140px] left-[50%] transform -translate-x-[630px]">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-[20px] font-semibold flex items-center">
+                    <i class="fa fa-thermometer-half text-red-500 mr-2"></i>温度
+                </h2>
+                <span class="text-[14px] bg-blue-100 text-blue-600 px-2 py-1 rounded-full">℃</span>
+            </div>
+            <div id="temperature" class="parameter-value text-red-500">--.-</div>
+            <div class="text-[14px] text-gray-500">最后更新: <span class="update-time" data-param="temperature">--:--:--</span></div>
+        </div>
+
+        <!-- 电导率卡片 -->
+        <div class="monitor-card top-[140px] left-[50%] transform -translate-x-[210px]">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-[20px] font-semibold flex items-center">
+                    <i class="fa fa-bolt text-yellow-500 mr-2"></i>电导率
+                </h2>
+                <span class="text-[14px] bg-blue-100 text-blue-600 px-2 py-1 rounded-full">μS/cm</span>
+            </div>
+            <div id="conductivity" class="parameter-value text-yellow-500">--.-</div>
+            <div class="text-[14px] text-gray-500">最后更新: <span class="update-time" data-param="conductivity">--:--:--</span></div>
+        </div>
+
+        <!-- 浑浊度卡片 -->
+        <div class="monitor-card top-[140px] left-[50%] transform translate-x-[210px]">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-[20px] font-semibold flex items-center">
+                    <i class="fa fa-tint text-blue-500 mr-2"></i>浑浊度
+                </h2>
+                <span class="text-[14px] bg-blue-100 text-blue-600 px-2 py-1 rounded-full">NTU</span>
+            </div>
+            <div id="turbidity" class="parameter-value text-blue-500">--.-</div>
+            <div class="text-[14px] text-gray-500">最后更新: <span class="update-time" data-param="turbidity">--:--:--</span></div>
+        </div>
+
+        <!-- 第二行 -->
+        <!-- pH值卡片 -->
+        <div class="monitor-card top-[370px] left-[50%] transform -translate-x-[630px]">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-[20px] font-semibold flex items-center">
+                    <i class="fa fa-flask text-green-500 mr-2"></i>pH值
+                </h2>
+                <span class="text-[14px] bg-blue-100 text-blue-600 px-2 py-1 rounded-full">pH</span>
+            </div>
+            <div id="ph" class="parameter-value text-green-500">--.-</div>
+            <div class="text-[14px] text-gray-500">最后更新: <span class="update-time" data-param="ph">--:--:--</span></div>
+        </div>
+
+        <!-- 坐标卡片 -->
+        <div class="monitor-card top-[370px] left-[50%] transform -translate-x-[210px]">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-[20px] font-semibold flex items-center">
+                    <i class="fa fa-map-marker text-purple-500 mr-2"></i>位置坐标
+                </h2>
+                <span class="text-[14px] bg-blue-100 text-blue-600 px-2 py-1 rounded-full">WGS84</span>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <div class="text-sm text-gray-500">经度</div>
+                    <div id="longitude" class="text-[24px] font-bold text-purple-500">--.----°</div>
+                </div>
+                <div>
+                    <div class="text-sm text-gray-500">纬度</div>
+                    <div id="latitude" class="text-[24px] font-bold text-purple-500">--.----°</div>
+                </div>
+            </div>
+            <div class="text-[14px] text-gray-500 mt-2">最后更新: <span class="update-time" data-param="coordinates">--:--:--</span></div>
+        </div>
+
+        <!-- 保留卡片 -->
+        <div class="monitor-card top-[370px] left-[50%] transform translate-x-[210px]">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="text-[20px] font-semibold flex items-center">
+                    <i class="fa fa-cog text-gray-500 mr-2"></i>备用模块
+                </h2>
+                <span class="text-[14px] bg-blue-100 text-blue-600 px-2 py-1 rounded-full">预留</span>
+            </div>
+            <div class="parameter-value text-gray-500">---</div>
+            <div class="text-[14px] text-gray-500">功能预留</div>
+        </div>
+
+        <!-- 趋势图 -->
+        <div class="chart-container top-[600px] left-[50%] transform -translate-x-1/2">
+            <h2 class="text-[20px] font-semibold mb-4">参数趋势图</h2>
+            <div class="chart-wrapper">
+                <canvas id="parametersChart"></canvas>
+            </div>
+            <!-- 自定义工具提示元素 -->
+            <div id="chart-tooltip" class="chart-tooltip" style="opacity: 0;"></div>
+        </div>
+
+        <!-- 系统时间 -->
+        <div class="time-card top-[1010px] left-[50%] transform -translate-x-1/2">
+            <div class="flex flex-row items-center justify-between">
+                <h2 class="text-[20px] font-semibold flex items-center">
+                    <i class="fa fa-clock-o text-purple-500 mr-2"></i>系统时间
+                </h2>
+                <div class="text-right">
+                    <div id="system-time" class="text-[30px] font-bold text-purple-500">--:--:--</div>
+                    <div id="system-date" class="text-[18px] text-gray-600">----年--月--日 星期--</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 阻止Ctrl+滚轮缩放
+        function preventZoom(e) {
+            if (e.ctrlKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+            }
+        }
+
+        // 历史数据存储
+        const historyData = { 
+            time: [], 
+            temperature: [], 
+            conductivity: [], 
+            turbidity: [], 
+            ph: [],
+            longitude: [],
+            latitude: []
+        };
+        const MAX_DATA_POINTS = 20;
+        let chart;
+        let updateInterval;
+        let consecutiveFailures = 0;
+
+        // 自定义工具提示处理
+        function setupTooltip(chart) {
+            const tooltip = document.getElementById('chart-tooltip');
+            const chartCanvas = document.getElementById('parametersChart');
+            
+            chartCanvas.addEventListener('mousemove', (e) => {
+                const points = chart.getElementsAtEventForMode(
+                    e, 'nearest', { intersect: false }, true
+                );
+                
+                if (points.length) {
+                    const firstPoint = points[0];
+                    const dataset = chart.data.datasets[firstPoint.datasetIndex];
+                    const value = dataset.data[firstPoint.index];
+                    const label = chart.data.labels[firstPoint.index];
+                    
+                    tooltip.innerHTML = `
+                        <div><strong>${dataset.label}</strong></div>
+                        <div>时间: ${label}</div>
+                        <div>数值: ${value.toFixed(2)}</div>
+                    `;
+                    
+                    tooltip.style.opacity = 1;
+                    tooltip.style.left = `${e.offsetX + 10}px`;
+                    tooltip.style.top = `${e.offsetY + 10}px`;
+                } else {
+                    tooltip.style.opacity = 0;
+                }
+            });
+            
+            chartCanvas.addEventListener('mouseout', () => {
+                tooltip.style.opacity = 0;
+            });
+        }
+
+        // 更新坐标显示
+        function updateCoordinates(lng, lat) {
+            document.getElementById('longitude').textContent = lng.toFixed(4) + '°';
+            document.getElementById('latitude').textContent = lat.toFixed(4) + '°';
+            
+            const timeStr = new Date().toTimeString().split(' ')[0];
+            document.querySelector('.update-time[data-param="coordinates"]').textContent = timeStr;
+        }
+
+        // 初始化图表
+        function initChart() {
+            try {
+                const canvas = document.getElementById('parametersChart');
+                const ctx = canvas.getContext('2d');
+                
+                // 设置canvas物理尺寸以匹配显示尺寸
+                const container = canvas.parentElement;
+                canvas.width = container.offsetWidth * 2;
+                canvas.height = container.offsetHeight * 2;
+                canvas.style.width = container.offsetWidth + 'px';
+                canvas.style.height = container.offsetHeight + 'px';
+                ctx.scale(2, 2);
+                
+                chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: historyData.time,
+                        datasets: [
+                            { 
+                                label: '温度 (℃)', 
+                                data: historyData.temperature, 
+                                borderColor: 'rgb(239, 68, 68)', 
+                                borderWidth: 2,
+                                tension: 0.3, 
+                                yAxisID: 'y',
+                                pointRadius: 3,
+                                pointHoverRadius: 5
+                            },
+                            { 
+                                label: '电导率 (μS/cm)', 
+                                data: historyData.conductivity, 
+                                borderColor: 'rgb(234, 179, 8)', 
+                                borderWidth: 2,
+                                tension: 0.3, 
+                                yAxisID: 'y1',
+                                pointRadius: 3,
+                                pointHoverRadius: 5
+                            },
+                            { 
+                                label: '浑浊度 (NTU)', 
+                                data: historyData.turbidity, 
+                                borderColor: 'rgb(59, 130, 246)', 
+                                borderWidth: 2,
+                                tension: 0.3, 
+                                yAxisID: 'y2',
+                                pointRadius: 3,
+                                pointHoverRadius: 5
+                            },
+                            { 
+                                label: 'pH值', 
+                                data: historyData.ph, 
+                                borderColor: 'rgb(34, 197, 94)', 
+                                borderWidth: 2,
+                                tension: 0.3, 
+                                yAxisID: 'y3',
+                                pointRadius: 3,
+                                pointHoverRadius: 5
+                            },
+                            { 
+                                label: '经度 (°)', 
+                                data: historyData.longitude, 
+                                borderColor: 'rgb(168, 85, 247)', 
+                                borderWidth: 2,
+                                tension: 0.3, 
+                                yAxisID: 'y4',
+                                pointRadius: 3,
+                                pointHoverRadius: 5,
+                                hidden: true
+                            },
+                            { 
+                                label: '纬度 (°)', 
+                                data: historyData.latitude, 
+                                borderColor: 'rgb(236, 72, 153)', 
+                                borderWidth: 2,
+                                tension: 0.3, 
+                                yAxisID: 'y5',
+                                pointRadius: 3,
+                                pointHoverRadius: 5,
+                                hidden: true
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 0 },
+                        layout: {
+                            padding: {
+                                top: 10,
+                                right: 15,
+                                bottom: 15,
+                                left: 15
+                            }
+                        },
+                        interaction: {
+                            mode: 'nearest',
+                            intersect: false,
+                            axis: 'x'
+                        },
+                        plugins: {
+                            tooltip: {
+                                enabled: false,
+                            },
+                            legend: {
+                                labels: {
+                                    font: {
+                                        size: 14
+                                    },
+                                    padding: 20,
+                                    usePointStyle: true,
+                                    pointStyle: 'circle'
+                                },
+                                position: 'top'
+                            }
+                        },
+                        scales: {
+                            x: { 
+                                title: { 
+                                    display: true, 
+                                    text: '时间',
+                                    font: {
+                                        size: 14,
+                                        weight: 'bold'
+                                    }
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 12
+                                    }
+                                }
+                            },
+                            y: { 
+                                type: 'linear', 
+                                position: 'left', 
+                                title: { 
+                                    display: true, 
+                                    text: '温度 (℃)',
+                                    font: {
+                                        size: 14,
+                                        weight: 'bold'
+                                    }
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 12
+                                    }
+                                }
+                            },
+                            y1: { 
+                                type: 'linear', 
+                                position: 'right', 
+                                title: { 
+                                    display: true, 
+                                    text: '电导率 (μS/cm)',
+                                    font: {
+                                        size: 14,
+                                        weight: 'bold'
+                                    }
+                                },
+                                ticks: {
+                                    font: {
+                                        size: 12
+                                    }
+                                },
+                                grid: {
+                                    drawOnChartArea: false
+                                }
+                            },
+                            y2: { type: 'linear', display: false },
+                            y3: { type: 'linear', display: false },
+                            y4: { type: 'linear', display: false },
+                            y5: { type: 'linear', display: false }
+                        }
+                    }
+                });
+                
+                // 设置自定义工具提示
+                setupTooltip(chart);
+                
+            } catch (error) {
+                console.error('图表初始化失败:', error);
+                //showUpdateStatus('图表初始化失败，请刷新页面', 'error');
+            }
+        }
+
+        // 更新图表数据
+        function updateChart(data) {
+            if (!chart) return;
+            
+            try {
+                const now = new Date();
+                const timeStr = now.toTimeString().split(' ')[0].substring(0, 8);
+                
+                historyData.time.push(timeStr);
+                historyData.temperature.push(parseFloat(data.temperature));
+                historyData.conductivity.push(parseFloat(data.conductivity));
+                historyData.turbidity.push(parseFloat(data.turbidity));
+                historyData.ph.push(parseFloat(data.ph));
+                historyData.longitude.push(parseFloat(data.longitude));
+                historyData.latitude.push(parseFloat(data.latitude));
+                
+                if (historyData.time.length > MAX_DATA_POINTS) {
+                    Object.keys(historyData).forEach(key => historyData[key].shift());
+                }
+                
+                chart.data.labels = historyData.time;
+                chart.data.datasets[0].data = historyData.temperature;
+                chart.data.datasets[1].data = historyData.conductivity;
+                chart.data.datasets[2].data = historyData.turbidity;
+                chart.data.datasets[3].data = historyData.ph;
+                chart.data.datasets[4].data = historyData.longitude;
+                chart.data.datasets[5].data = historyData.latitude;
+                chart.update('none');
+            } catch (error) {
+                console.error('图表更新失败:', error);
+                //showUpdateStatus('图表更新失败', 'error');
+            }
+        }
+
+        // 更新系统时间
+        function updateSystemTime() {
+            const now = new Date();
+            document.getElementById('system-time').textContent = now.toTimeString().split(' ')[0];
+            document.getElementById('system-date').textContent = 
+                `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 星期${['日','一','二','三','四','五','六'][now.getDay()]}`;
+        }
+
+        // 更新单个参数
+        function updateParameter(paramId, value) {
+            try {
+                const element = document.getElementById(paramId);
+                if (!element) {
+                    throw new Error(`未找到ID为${paramId}的元素`);
+                }
+                element.textContent = value;
+                
+                const timeStr = new Date().toTimeString().split(' ')[0];
+                const timeElement = document.querySelector(`.update-time[data-param="${paramId}"]`);
+                if (timeElement) {
+                    timeElement.textContent = timeStr;
+                }
+            } catch (error) {
+                console.error(`更新参数${paramId}失败:`, error);
+            }
+        }
+
+        // 显示更新状态
+        /*function showUpdateStatus(message, type = 'success') {
+            const statusEl = document.getElementById('update-status');
+            statusEl.textContent = message;
+            statusEl.className = type === 'success' ? 'text-green-500 text-sm mt-2' : 'text-red-500 text-sm mt-2';
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusEl.textContent = '';
+                }, 3000);
+            }
+        }
+            */
+
+        // 更新参数数据
+        async function updateParameters() {
+            try {
+                if (consecutiveFailures >= 5) {
+                    //showUpdateStatus(`连续${consecutiveFailures}次请求失败，已延长更新间隔`, 'error');
+                    return;
+                }
+
+                const timestamp = new Date().getTime();
+                const random = Math.random().toString(36).substring(2, 10);
+                const response = await fetch(`/data?timestamp=${timestamp}&random=${random}`, {
+                    method: 'GET',
+                    cache: 'no-store',
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`服务器返回错误: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                const requiredFields = ['temperature', 'conductivity', 'turbidity', 'ph', 'longitude', 'latitude'];
+                const missingFields = requiredFields.filter(field => data[field] === undefined);
+                if (missingFields.length > 0) {
+                    throw new Error(`数据格式错误，缺少字段: ${missingFields.join(', ')}`);
+                }
+
+                // 更新各参数显示
+                updateParameter('temperature', data.temperature);
+                updateParameter('conductivity', data.conductivity);
+                updateParameter('turbidity', data.turbidity);
+                updateParameter('ph', data.ph);
+                updateCoordinates(data.longitude, data.latitude);
+                
+                // 更新图表
+                updateChart(data);
+                
+                //showUpdateStatus('数据更新成功');
+                consecutiveFailures = 0;
+
+            } catch (error) {
+                console.error('数据更新失败:', error);
+                consecutiveFailures++;
+            }
+        }
+
+        function init() {
+            // 禁用右键菜单防止用户缩放
+            document.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+            });
+
+            updateSystemTime();
+            setInterval(updateSystemTime, 1000);
+
+            initChart();
+
+            // 窗口大小变化时重绘图表
+            window.addEventListener('resize', function() {
+                if (chart) {
+                    const canvas = document.getElementById('parametersChart');
+                    const container = canvas.parentElement;
+                    canvas.width = container.offsetWidth * 2;
+                    canvas.height = container.offsetHeight * 2;
+                    canvas.style.width = container.offsetWidth + 'px';
+                    canvas.style.height = container.offsetHeight + 'px';
+                    chart.resize();
+                }
+            });
+
+            updateParameters();
+
+            updateInterval = setInterval(() => {
+                const interval = consecutiveFailures >= 5 ? 5000 : 3000;
+                //consecutiveFailures = 0;
+                updateParameters();
+            }, 2000);
+            
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && updateInterval) {
+                    clearInterval(updateInterval);
+                    updateInterval = null;
+                    //showUpdateStatus('页面隐藏，暂停数据更新');
+                } else if (!document.hidden && !updateInterval) {
+                    updateParameters();
+                    updateInterval = setInterval(updateParameters, 2000);
+                   // showUpdateStatus('页面可见，恢复数据更新');
+                }
+            });
+            
+        }
+        
+        window.onload = init;
+    </script>
+</body>
+</html>
